@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  identity-service:
+    build:
+      context: ./identity_service
+      dockerfile: Dockerfile
+    container_name: identity-service
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./data/identity:/app/data
+    environment:
+      - DB_PATH=/app/data/identity.db
+      - PUERTO=8001
+      - DEBUG=False
+    restart: unless-stopped
+
+  groups-service:
+    build:
+      context: ./groups_service
+      dockerfile: Dockerfile
+    container_name: groups-service
+    ports:
+      - "8002:8002"
+    volumes:
+      - ./data/groups:/app/data
+    environment:
+      - DB_PATH=/app/data/groups.db
+      - PUERTO=8002
+      - DEBUG=False
+    restart: unless-stopped
+
+  bff-service:
+    build:
+      context: ./bff_service
+      dockerfile: Dockerfile
+    container_name: bff-service
+    ports:
+      - "8000:8000"
+    environment:
+      - IDENTITY_SERVICE_URL=http://identity-service:8001
+      - GROUPS_SERVICE_URL=http://groups-service:8002
+      - PUERTO=8000
+      - DEBUG=False
+    depends_on:
+      - identity-service
+      - groups-service
+    restart: unless-stopped

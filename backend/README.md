@@ -348,8 +348,10 @@ GET /health
   "version": "1.0.0",
   "conexiones_activas": 10,
   "grupos_activos": 3,
-  "sesiones_persistidas": 10,
-  "eventos_procesados": 150
+  "servicios_internos": {
+    "identity_service": "saludable",
+    "groups_service": "saludable"
+  }
 }
 ```
 

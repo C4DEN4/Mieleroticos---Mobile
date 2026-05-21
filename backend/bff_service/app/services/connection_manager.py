@@ -21,6 +21,14 @@ class GestorConexiones:
 
     async def conectar(self, id_sesion: str, id_grupo: str, nombre: str, websocket: WebSocket):
         async with self._bloqueo:
+            if id_sesion in self._conexiones:
+                conexion_anterior = self._conexiones[id_sesion]
+                if conexion_anterior is not websocket:
+                    try:
+                        await conexion_anterior.close(code=1000, reason="Reemplazada por nueva conexion")
+                    except Exception:
+                        pass
+
             self._conexiones[id_sesion] = websocket
             self._grupos_sesion[id_sesion] = id_grupo
             self._nombres_sesion[id_sesion] = nombre

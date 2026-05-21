@@ -15,6 +15,9 @@ async def endpoint_websocket(
     id_grupo: str = Query(...),
     nombre: str = Query(...)
 ):
+    registrador.info(
+        f"Intento WebSocket: id_sesion={id_sesion}, id_grupo={id_grupo}, nombre={nombre}"
+    )
     try:
         sesion = await cliente_http.obtener_sesion_identidad(id_sesion)
     except ConnectionError:

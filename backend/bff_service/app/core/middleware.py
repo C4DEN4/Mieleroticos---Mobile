@@ -28,15 +28,23 @@ class MiddlewareToleranciaFallos:
         else:
             await self.app(scope, receive, send)
 
-async def manejador_excepcion_http(solicitud: Request, exc: StarletteHTTPException):
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={
-            "error": "ERROR_HTTP",
-            "mensaje": str(exc.detail),
-            "codigo_estado": exc.status_code
+def _normalizar_detalle_http(detail, codigo_estado: int) -> dict:
+    if isinstance(detail, dict):
+        return {
+            "error": detail.get("error", "ERROR_HTTP"),
+            "mensaje": detail.get("mensaje", detail.get("message", "Error en la solicitud")),
+            "codigo_estado": detail.get("codigo_estado", codigo_estado),
         }
-    )
+    return {
+        "error": "ERROR_HTTP",
+        "mensaje": str(detail),
+        "codigo_estado": codigo_estado,
+    }
+
+
+async def manejador_excepcion_http(solicitud: Request, exc: StarletteHTTPException):
+    contenido = _normalizar_detalle_http(exc.detail, exc.status_code)
+    return JSONResponse(status_code=exc.status_code, content=contenido)
 
 async def manejador_excepcion_validacion(solicitud: Request, exc: RequestValidationError):
     return JSONResponse(

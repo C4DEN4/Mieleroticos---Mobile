@@ -8,34 +8,45 @@ from app.models.session import CrearSesion, RespuestaSesion
 
 class ServicioSesion:
     def __init__(self):
-        self._bloqueos_nombre: Dict[str, asyncio.Lock] = {}
+        self._bloqueos: Dict[str, asyncio.Lock] = {}
         self._bloqueo_global = asyncio.Lock()
+
+    def _clave_bloqueo(self, nombre: str, id_grupo: str) -> str:
+        return f"{nombre}:{id_grupo}"
 
     async def crear_sesion(self, datos_sesion: CrearSesion) -> RespuestaSesion:
         nombre = datos_sesion.nombre
+        id_grupo = datos_sesion.id_grupo
+        clave = self._clave_bloqueo(nombre, id_grupo)
 
         async with self._bloqueo_global:
-            if nombre not in self._bloqueos_nombre:
-                self._bloqueos_nombre[nombre] = asyncio.Lock()
-            bloqueo_nombre = self._bloqueos_nombre[nombre]
+            if clave not in self._bloqueos:
+                self._bloqueos[clave] = asyncio.Lock()
+            bloqueo = self._bloqueos[clave]
 
-        async with bloqueo_nombre:
-            sesion_existente = base_datos.obtener_sesion_por_nombre(nombre)
+        async with bloqueo:
+            await self.limpiar_sesiones_expiradas()
+
+            sesion_existente = base_datos.obtener_sesion_por_nombre_y_grupo(nombre, id_grupo)
             if sesion_existente:
-                raise ValueError(f"Sesión con nombre '{nombre}' ya existe")
+                raise ValueError(
+                    f"El nombre '{nombre}' ya está en uso en el grupo '{id_grupo}'"
+                )
 
             id_sesion = generar_id_sesion()
             ahora = datetime.utcnow()
             fecha_expiracion = ahora + timedelta(seconds=configuracion.sesion_ttl)
 
-            exito = base_datos.crear_sesion(id_sesion, nombre, datos_sesion.id_grupo, fecha_expiracion)
+            exito = base_datos.crear_sesion(id_sesion, nombre, id_grupo, fecha_expiracion)
             if not exito:
-                raise ValueError(f"Sesión con nombre '{nombre}' ya existe")
+                raise ValueError(
+                    f"El nombre '{nombre}' ya está en uso en el grupo '{id_grupo}'"
+                )
 
             sesion = {
                 "id_sesion": id_sesion,
                 "nombre": nombre,
-                "id_grupo": datos_sesion.id_grupo,
+                "id_grupo": id_grupo,
                 "fecha_creacion": ahora,
                 "fecha_expiracion": fecha_expiracion
             }

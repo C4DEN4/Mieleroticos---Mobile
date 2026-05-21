@@ -24,14 +24,44 @@ class BaseDatos:
                     group_id TEXT NOT NULL,
                     created_at TEXT NOT NULL,
                     expires_at TEXT NOT NULL,
-                    UNIQUE(name)
+                    UNIQUE(name, group_id)
                 )
             """)
+            self._migrar_esquema_si_necesario(conn)
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at)")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_sessions_name ON sessions(name)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_sessions_name_group ON sessions(name, group_id)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_sessions_group_id ON sessions(group_id)")
             conn.commit()
             registrador.info(f"Base de datos de Identidad inicializada: {self.ruta_db}")
+
+    def _migrar_esquema_si_necesario(self, conn):
+        """Migra esquema antiguo UNIQUE(name) → UNIQUE(name, group_id)."""
+        cursor = conn.cursor()
+        cursor.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='sessions'")
+        fila = cursor.fetchone()
+        if not fila or not fila[0]:
+            return
+        if "UNIQUE(name, group_id)" in fila[0]:
+            return
+
+        registrador.info("Migrando tabla sessions a unicidad por (name, group_id)")
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS sessions_new (
+                session_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                group_id TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                UNIQUE(name, group_id)
+            )
+        """)
+        cursor.execute("""
+            INSERT OR IGNORE INTO sessions_new (session_id, name, group_id, created_at, expires_at)
+            SELECT session_id, name, group_id, created_at, expires_at FROM sessions
+        """)
+        cursor.execute("DROP TABLE sessions")
+        cursor.execute("ALTER TABLE sessions_new RENAME TO sessions")
+        conn.commit()
     
     @contextmanager
     def _obtener_conexion(self):
@@ -70,15 +100,15 @@ class BaseDatos:
                 return dict(fila)
             return None
     
-    def obtener_sesion_por_nombre(self, nombre: str) -> Optional[Dict]:
+    def obtener_sesion_por_nombre_y_grupo(self, nombre: str, id_grupo: str) -> Optional[Dict]:
         ahora = datetime.utcnow().isoformat()
         with self._obtener_conexion() as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT session_id, name, group_id, created_at, expires_at
                 FROM sessions
-                WHERE name = ? AND expires_at > ?
-            """, (nombre, ahora))
+                WHERE name = ? AND group_id = ? AND expires_at > ?
+            """, (nombre, id_grupo, ahora))
             fila = cursor.fetchone()
             if fila:
                 return dict(fila)
